@@ -2,7 +2,7 @@ import concurrent.futures, subprocess
 import os, os.path, sys, time, glob
 import yaml
 import xml.etree.ElementTree as ET
-from typing import Callable
+from typing import Callable, Dict, List
 
 # Extracted from the documentation of clang-format version 13
 # https://releases.llvm.org/13.0.0/tools/clang/docs/ClangFormat.html
@@ -110,7 +110,7 @@ ALL_TUNEABLE_OPTIONS = {
 CLANG_FORMAT_CONFIG_FILE = '.clang-format'
 CXX_EXTENSIONS = ['.cpp', '.cxx', '.cc', '.hpp', '.hxx', '.hh', '.h']
 
-StyleSettings = dict[str, str]
+StyleSettings = Dict[str, str]
 StyleObjectiveFun = Callable[[StyleSettings], int]
 
 
@@ -119,7 +119,7 @@ def save_clang_format_config(config: StyleSettings):
         yaml.dump(config, f, Dumper=yaml.SafeDumper, explicit_start=True, explicit_end=True, sort_keys=False)
 
 
-def eval_clang_format_config_cost(config: StyleSettings, file_list: list[str]):
+def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str]):
     def run_clang_format(fn: str):
         clang_args = ['clang-format', '--style=file', '--output-replacements-xml', fn]
         return subprocess.run(clang_args, check=True, capture_output=True).stdout
@@ -138,12 +138,14 @@ def eval_clang_format_config_cost(config: StyleSettings, file_list: list[str]):
         return sum(executor.map(eval_file_cost, file_list))
 
 
-def optimize_configuration(rw_config: StyleSettings, tuneable_options: list[str], cost_fun: StyleObjectiveFun):
+def optimize_configuration(rw_config: StyleSettings, tuneable_options: List[str], cost_fun: StyleObjectiveFun):
     def calc_option_costs(baseline: StyleSettings, key: str):
+        config = baseline.copy()
         costs = {}
         for val in ALL_TUNEABLE_OPTIONS[key]:
             try:
-                costs[val] = cost_fun(baseline | {key: val})
+                config[key] = val
+                costs[val] = cost_fun(config)
             except subprocess.CalledProcessError:
                 print('!', end='', flush=True)
         return costs
@@ -185,7 +187,7 @@ def verify_clang_version():
         sys.exit('clang-format version 13.0.0 is required')
 
 
-def collect_source_files(args: list[str]) -> list[str]:
+def collect_source_files(args: List[str]) -> List[str]:
     def is_cxx_file(filename: str) -> bool:
         _, ext = os.path.splitext(filename)
         return ext.lower() in CXX_EXTENSIONS
