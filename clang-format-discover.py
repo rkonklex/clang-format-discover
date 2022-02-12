@@ -2,7 +2,7 @@ import concurrent.futures, subprocess
 import os, os.path, sys, time, glob
 import yaml
 import xml.etree.ElementTree as ET
-from typing import Callable, Dict, List
+from typing import Callable, Iterable, Dict, List
 
 # Extracted from the documentation of clang-format version 13
 # https://releases.llvm.org/13.0.0/tools/clang/docs/ClangFormat.html
@@ -119,14 +119,14 @@ def save_clang_format_config(config: StyleSettings):
         yaml.dump(config, f, Dumper=yaml.SafeDumper, explicit_start=True, explicit_end=True, sort_keys=False)
 
 
-def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str]):
+def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str]) -> int:
     def run_clang_format(fn: str):
         clang_args = ['clang-format', '--style=file', '--output-replacements-xml', fn]
         return subprocess.run(clang_args, check=True, capture_output=True).stdout
 
-    def eval_file_cost(filename: str):
-        def process_response(result: ET.Element):
-            def eval_replacement_cost(rep: ET.Element):
+    def eval_file_cost(filename: str) -> int:
+        def process_response(result: ET.Element) -> int:
+            def eval_replacement_cost(rep: ET.Element) -> int:
                 num_inserted = len(''.join(rep.itertext()))
                 num_removed = int(rep.attrib.get('length', '0'))
                 return num_inserted + num_removed
@@ -139,7 +139,7 @@ def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str]):
 
 
 def optimize_configuration(rw_config: StyleSettings, tuneable_options: List[str], cost_fun: StyleObjectiveFun):
-    def calc_option_costs(baseline: StyleSettings, key: str):
+    def calc_option_costs(baseline: StyleSettings, key: str) -> Dict[str, int]:
         config = baseline.copy()
         costs = {}
         for val in ALL_TUNEABLE_OPTIONS[key]:
@@ -150,7 +150,7 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: List[str]
                 print('!', end='', flush=True)
         return costs
 
-    def calc_pass_costs(baseline: StyleSettings):
+    def calc_pass_costs(baseline: StyleSettings) -> Dict[str, Dict[str, int]]:
         pass_costs = {}
         for key in list(set(tuneable_options) - baseline.keys()):
             print('.', end='', flush=True)
@@ -192,7 +192,7 @@ def collect_source_files(args: List[str]) -> List[str]:
         _, ext = os.path.splitext(filename)
         return ext.lower() in CXX_EXTENSIONS
 
-    def walk_files(dirpath):
+    def walk_files(dirpath: str) -> Iterable[str]:
         return [os.path.join(root, name) for root, _, files in os.walk(dirpath) for name in files]
 
     expanded_args = list(path for globspec in args for path in glob.glob(globspec, recursive=True))
@@ -202,7 +202,7 @@ def collect_source_files(args: List[str]) -> List[str]:
     return list(path for path in file_list if is_cxx_file(path))
 
 
-def main(argv):
+def main(argv: List[str]):
     verify_clang_version()
     try:
         with open(CLANG_FORMAT_CONFIG_FILE, 'r') as f:
@@ -220,7 +220,6 @@ def main(argv):
         optimize_configuration(current_config, tuneable_options, cost_func)
     except KeyboardInterrupt:
         print('\ninterrupted')
-        pass
 
     print(f'saving best configuration to {CLANG_FORMAT_CONFIG_FILE}')
     save_clang_format_config(current_config)
