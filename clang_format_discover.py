@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 from typing import Callable, Iterable, Dict, List
 
 # Extracted from the documentation of clang-format version 13
-# https://releases.llvm.org/13.0.0/tools/clang/docs/ClangFormat.html
+# https://releases.llvm.org/13.0.0/tools/clang/docs/ClangFormatStyleOptions.html
 ALL_TUNEABLE_OPTIONS = {
     'AccessModifierOffset': ['-4', '-3', '-2', '-1', '0'],
     'AlignAfterOpenBracket': ['Align', 'DontAlign', 'AlwaysBreak'],
