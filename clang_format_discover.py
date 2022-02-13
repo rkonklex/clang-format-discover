@@ -154,19 +154,25 @@ class ReplacementsXmlHandler(xml.sax.handler.ContentHandler):
         return sum(ninsert + nremove for ninsert, nremove in self._replacements)
 
 
-def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str], mapper: MapDispatcherFun[str, str]) -> int:
-    def run_clang_format(fn: str) -> str:
-        clang_args = ['clang-format', '--style=file', '--output-replacements-xml', fn]
+def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str], mapper: MapDispatcherFun[Iterable[str], str]) -> int:
+    def run_clang_format(files: Iterable[str]) -> str:
+        clang_args = ['clang-format', '--style=file', '--output-replacements-xml', *files]
         return subprocess.run(clang_args, check=True, capture_output=True, text=True).stdout
+
+    def chunkify(it: Iterable[str], size: int) -> Iterable[Tuple[str]]:
+        it = iter(it)
+        return iter(lambda: tuple(itertools.islice(it, size)), ())
 
     save_clang_format_config(config)
     handler = ReplacementsXmlHandler()
     parser = xml.sax.make_parser(['xml.sax.IncrementalParser'])
     parser.setContentHandler(handler)
-    for output in mapper(run_clang_format, file_list):
-        parser.reset()
-        parser.feed(output)
-        parser.close()
+    for output_xml in mapper(run_clang_format, chunkify(file_list, 10)):
+        for line in output_xml.splitlines():
+            if line.startswith("<?xml version='1.0'?>"):
+                parser.close()
+                parser.reset()
+            parser.feed(line)
     return handler.get_total_cost()
 
 
