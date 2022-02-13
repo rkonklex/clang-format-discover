@@ -202,7 +202,7 @@ def collect_source_files(args: List[str]) -> List[str]:
     return list(path for path in file_list if is_cxx_file(path))
 
 
-def main(argv: List[str]):
+def main():
     verify_clang_version()
     try:
         with open(CLANG_FORMAT_CONFIG_FILE, 'r') as f:
@@ -211,7 +211,7 @@ def main(argv: List[str]):
         baseline_config = {'Language':'Cpp'}
         print(f'{CLANG_FORMAT_CONFIG_FILE} not found: will create it for you')
 
-    file_list = collect_source_files(argv[1:])
+    file_list = collect_source_files(sys.argv[1:])
     cost_func = lambda config: eval_clang_format_config_cost(config, file_list)
 
     tuneable_options = list(ALL_TUNEABLE_OPTIONS.keys() - baseline_config.keys())
@@ -225,4 +225,4 @@ def main(argv: List[str]):
     save_clang_format_config(current_config)
 
 if __name__ == '__main__':
-    main(sys.argv)
+    main()
