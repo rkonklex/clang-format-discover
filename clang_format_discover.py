@@ -1,8 +1,9 @@
 import concurrent.futures, subprocess
+import itertools
 import os, os.path, sys, time, glob
 import yaml
 import xml.etree.ElementTree as ET
-from typing import Callable, Iterable, Dict, List, Tuple, TypeVar
+from typing import Callable, Iterable, Dict, List, TypeVar
 
 # Extracted from the documentation of clang-format version 13
 # https://releases.llvm.org/13.0.0/tools/clang/docs/ClangFormatStyleOptions.html
@@ -31,6 +32,7 @@ ALL_TUNEABLE_OPTIONS = {
     'AlwaysBreakAfterReturnType': ['None', 'All', 'TopLevel', 'AllDefinitions', 'TopLevelDefinitions'],
     'AlwaysBreakBeforeMultilineStrings': ['false', 'true'],
     'AlwaysBreakTemplateDeclarations': ['No', 'MultiLine', 'Yes'],
+    'BasedOnStyle': ['LLVM', 'Google', 'Chromium', 'Mozilla', 'WebKit', 'Microsoft', 'GNU'],
     'BinPackArguments': ['true', 'false'],
     'BinPackParameters': ['true', 'false'],
     'BitFieldColonSpacing': ['Both', 'None', 'Before', 'After'],
@@ -106,6 +108,7 @@ ALL_TUNEABLE_OPTIONS = {
     'Standard': ['c++03', 'c++11', 'c++14', 'c++17', 'c++20', 'Latest'],
     'UseTab': ['Never', 'ForIndentation', 'ForContinuationAndIndentation', 'AlignWithSpaces', 'Always'],
 }
+PRIORITY_OPTIONS = ['BasedOnStyle', 'BreakBeforeBraces', 'IndentWidth', 'UseTab', 'SortIncludes', 'IncludeBlocks']
 
 CLANG_FORMAT_CONFIG_FILE = '.clang-format'
 CXX_EXTENSIONS = ['.cpp', '.cxx', '.cc', '.c', '.hpp', '.hxx', '.hh', '.h', '.ipp']
@@ -115,7 +118,6 @@ StyleSettings = Dict[str, str]
 StyleObjectiveFun = Callable[[StyleSettings], int]
 MapDispatcherFun = Callable[[Callable[[_T], _U], Iterable[_T]], Iterable[_U]]
 ValueCostMap = Dict[str, int]
-OptionValueCostMap = Dict[str, ValueCostMap]
 
 
 def save_clang_format_config(config: StyleSettings):
@@ -141,7 +143,11 @@ def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str], m
     return sum(mapper(eval_file_cost, file_list))
 
 
-def optimize_configuration(rw_config: StyleSettings, tuneable_options: List[str], cost_fun: StyleObjectiveFun):
+def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[str], cost_fun: StyleObjectiveFun):
+    effective_tuneable_options = [k for k in tuneable_options if not k in rw_config]
+    if not effective_tuneable_options:
+        return
+
     def calc_values_costs(baseline: StyleSettings, key: str) -> ValueCostMap:
         config = baseline.copy()
         costs: ValueCostMap = {}
@@ -153,32 +159,29 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: List[str]
                 print('!', end='', flush=True)
         return costs
 
-    def calc_options_values_costs(baseline: StyleSettings) -> OptionValueCostMap:
-        costs: OptionValueCostMap = {}
-        for key in list(set(tuneable_options) - baseline.keys()):
-            print('.', end='', flush=True)
-            costs[key] = calc_values_costs(baseline, key)
-        print('')
-        return costs
-
     current_cost = cost_fun(rw_config)
-    max_num_passes = len(tuneable_options)
-    for passnum in range(max_num_passes):
-        t_start = time.monotonic()
-        print(f'pass {passnum+1} current_cost={current_cost}')
-        all_costs = calc_options_values_costs(rw_config)
-        best_key = min(all_costs, key=lambda k: min(all_costs[k].values()))
-        best_key_costs = all_costs[best_key]
-        best_val = min(best_key_costs, key=best_key_costs.get)
-        best_val_cost = best_key_costs[best_val]
-        t_end = time.monotonic()
-        print(f'processing time: {t_end-t_start} seconds')
-        if best_val_cost >= current_cost:
+    noop_sentinel = None
+    print(f'Trying to optimize {len(effective_tuneable_options)} variables...')
+    t_start = time.monotonic()
+    for key in itertools.cycle(effective_tuneable_options):
+        if key == noop_sentinel:
             break
-        print(f'{best_key}={best_val} cost {current_cost}=>{best_val_cost} {best_key_costs}')
-        print()
-        rw_config[best_key] = best_val
-        current_cost = best_val_cost
+        all_costs = calc_values_costs(rw_config, key)
+        best_val, best_cost = min(all_costs.items(), key=lambda kv: kv[1])
+
+        if best_cost < current_cost:
+            if noop_sentinel:
+                print()
+                noop_sentinel = None
+            print(f'{key}={best_val} cost {current_cost} => {best_cost} {all_costs}')
+            rw_config[key] = best_val
+            current_cost = best_cost
+        else:
+            if not noop_sentinel:
+                noop_sentinel = key
+            print('.', end='', flush=True)
+    t_end = time.monotonic()
+    print(f'\nDone! Processing time: {t_end-t_start} seconds\n')
 
 
 def verify_clang_version():
@@ -217,17 +220,18 @@ def main():
     file_list = collect_source_files(sys.argv[1:] if len(sys.argv) > 1 else ['.'])
     print('Source files:', ' '.join(file_list), '\n')
 
-    tuneable_options = list(ALL_TUNEABLE_OPTIONS.keys() - baseline_config.keys())
     current_config = baseline_config.copy()
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             cost_func: StyleObjectiveFun = lambda config: eval_clang_format_config_cost(config, file_list, executor.map)
-            optimize_configuration(current_config, tuneable_options, cost_func)
-        print('done: unable to optimize any further')
+            # start with most impactful options
+            optimize_configuration(current_config, PRIORITY_OPTIONS, cost_func)
+            # then continue with the rest
+            optimize_configuration(current_config, ALL_TUNEABLE_OPTIONS.keys(), cost_func)
     except KeyboardInterrupt:
-        print('\ninterrupted')
+        print('\nInterrupted')
 
-    print(f'saving best configuration to {CLANG_FORMAT_CONFIG_FILE}')
+    print(f'Saving best configuration to {CLANG_FORMAT_CONFIG_FILE}')
     save_clang_format_config(current_config)
 
 if __name__ == '__main__':
