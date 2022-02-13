@@ -208,7 +208,7 @@ def main(argv: List[str]):
         with open(CLANG_FORMAT_CONFIG_FILE, 'r') as f:
             baseline_config = yaml.load(f, Loader=yaml.BaseLoader)
     except FileNotFoundError:
-        baseline_config = {}
+        baseline_config = {'Language':'Cpp'}
         print(f'{CLANG_FORMAT_CONFIG_FILE} not found: will create it for you')
 
     file_list = collect_source_files(argv[1:])
