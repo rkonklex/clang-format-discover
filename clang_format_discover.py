@@ -114,6 +114,8 @@ _T, _U = TypeVar('T'), TypeVar('U')
 StyleSettings = Dict[str, str]
 StyleObjectiveFun = Callable[[StyleSettings], int]
 MapDispatcherFun = Callable[[Callable[[_T], _U], Iterable[_T]], Iterable[_U]]
+ValueCostMap = Dict[str, int]
+OptionValueCostMap = Dict[str, ValueCostMap]
 
 
 def save_clang_format_config(config: StyleSettings):
@@ -140,9 +142,9 @@ def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str], m
 
 
 def optimize_configuration(rw_config: StyleSettings, tuneable_options: List[str], cost_fun: StyleObjectiveFun):
-    def calc_option_costs(baseline: StyleSettings, key: str) -> Dict[str, int]:
+    def calc_values_costs(baseline: StyleSettings, key: str) -> ValueCostMap:
         config = baseline.copy()
-        costs = {}
+        costs: ValueCostMap = {}
         for val in ALL_TUNEABLE_OPTIONS[key]:
             try:
                 config[key] = val
@@ -151,27 +153,27 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: List[str]
                 print('!', end='', flush=True)
         return costs
 
-    def calc_pass_costs(baseline: StyleSettings) -> Dict[str, Dict[str, int]]:
-        pass_costs = {}
+    def calc_options_values_costs(baseline: StyleSettings) -> OptionValueCostMap:
+        costs: OptionValueCostMap = {}
         for key in list(set(tuneable_options) - baseline.keys()):
             print('.', end='', flush=True)
-            pass_costs[key] = calc_option_costs(baseline, key)
+            costs[key] = calc_values_costs(baseline, key)
         print('')
-        return pass_costs
+        return costs
 
     current_cost = cost_fun(rw_config)
-    for passnum in range(len(tuneable_options)):
+    max_num_passes = len(tuneable_options)
+    for passnum in range(max_num_passes):
         t_start = time.monotonic()
         print(f'pass {passnum+1} current_cost={current_cost}')
-        pass_costs = calc_pass_costs(rw_config)
-        best_key = min(pass_costs, key=lambda k: min(pass_costs[k].values()))
-        best_key_costs = pass_costs[best_key]
+        all_costs = calc_options_values_costs(rw_config)
+        best_key = min(all_costs, key=lambda k: min(all_costs[k].values()))
+        best_key_costs = all_costs[best_key]
         best_val = min(best_key_costs, key=best_key_costs.get)
         best_val_cost = best_key_costs[best_val]
         t_end = time.monotonic()
         print(f'processing time: {t_end-t_start} seconds')
         if best_val_cost >= current_cost:
-            print('done: unable to optimize any further')
             break
         print(f'{best_key}={best_val} cost {current_cost}=>{best_val_cost} {best_key_costs}')
         print()
@@ -207,9 +209,9 @@ def main():
     verify_clang_version()
     try:
         with open(CLANG_FORMAT_CONFIG_FILE, 'r') as f:
-            baseline_config = yaml.load(f, Loader=yaml.BaseLoader)
+            baseline_config: StyleSettings = yaml.load(f, Loader=yaml.BaseLoader)
     except FileNotFoundError:
-        baseline_config = {'Language':'Cpp'}
+        baseline_config: StyleSettings = {'Language':'Cpp'}
         print(f'{CLANG_FORMAT_CONFIG_FILE} not found: will create it for you')
 
     file_list = collect_source_files(sys.argv[1:] if len(sys.argv) > 1 else ['.'])
@@ -221,6 +223,7 @@ def main():
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             cost_func: StyleObjectiveFun = lambda config: eval_clang_format_config_cost(config, file_list, executor.map)
             optimize_configuration(current_config, tuneable_options, cost_func)
+        print('done: unable to optimize any further')
     except KeyboardInterrupt:
         print('\ninterrupted')
 
