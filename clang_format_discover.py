@@ -109,6 +109,7 @@ ALL_TUNEABLE_OPTIONS = {
     'UseTab': ['Never', 'ForIndentation', 'ForContinuationAndIndentation', 'AlignWithSpaces', 'Always'],
 }
 PRIORITY_OPTIONS = ['BasedOnStyle', 'BreakBeforeBraces', 'IndentWidth', 'UseTab', 'SortIncludes', 'IncludeBlocks']
+EMPTY_VAL = ''
 
 CLANG_FORMAT_CONFIG_FILE = '.clang-format'
 CXX_EXTENSIONS = ['.cpp', '.cxx', '.cc', '.c', '.hpp', '.hxx', '.hh', '.h', '.ipp']
@@ -151,6 +152,10 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[
     def calc_values_costs(baseline: StyleSettings, key: str) -> ValueCostMap:
         config = baseline.copy()
         costs: ValueCostMap = {}
+        if key in config and key in effective_tuneable_options:
+            del config[key]
+            # prefer defaulted values
+            costs[EMPTY_VAL] = cost_fun(config) - 1
         for val in ALL_TUNEABLE_OPTIONS[key]:
             try:
                 config[key] = val
@@ -174,7 +179,10 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[
                 print()
                 noop_sentinel = None
             print(f'{key}={best_val} cost {current_cost} => {best_cost} {all_costs}')
-            rw_config[key] = best_val
+            if best_val == EMPTY_VAL:
+                del rw_config[key]
+            else:
+                rw_config[key] = best_val
             current_cost = best_cost
         else:
             if not noop_sentinel:
