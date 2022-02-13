@@ -2,8 +2,8 @@ import concurrent.futures, subprocess
 import itertools
 import os, os.path, sys, time, glob
 import yaml
-import xml.etree.ElementTree as ET
-from typing import Callable, Iterable, Dict, List, TypeVar
+import xml.sax, xml.sax.handler
+from typing import Callable, Iterable, Dict, List, Tuple, TypeVar
 
 # Extracted from the documentation of clang-format version 13
 # https://releases.llvm.org/13.0.0/tools/clang/docs/ClangFormatStyleOptions.html
@@ -126,22 +126,48 @@ def save_clang_format_config(config: StyleSettings):
         yaml.dump(config, f, Dumper=yaml.SafeDumper, explicit_start=True, explicit_end=True, sort_keys=False)
 
 
-def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str], mapper: MapDispatcherFun[str, int]) -> int:
-    def run_clang_format(fn: str):
-        clang_args = ['clang-format', '--style=file', '--output-replacements-xml', fn]
-        return subprocess.run(clang_args, check=True, capture_output=True).stdout
+class ReplacementsXmlHandler(xml.sax.handler.ContentHandler):
+    _started: bool = False
+    _num_remove: int
+    _num_insert: int
+    _replacements: List[Tuple[int, int]]
 
-    def eval_file_cost(filename: str) -> int:
-        def process_response(result: ET.Element) -> int:
-            def eval_replacement_cost(rep: ET.Element) -> int:
-                num_inserted = len(''.join(rep.itertext()))
-                num_removed = int(rep.attrib.get('length', '0'))
-                return num_inserted + num_removed
-            return sum(map(eval_replacement_cost, result.findall('replacement')))
-        return process_response(ET.fromstring(run_clang_format(filename)))
+    def __init__(self) -> None:
+        self._replacements = []
+
+    def startElement(self, name: str, attrs: Dict[str, str]):
+        if name == 'replacement':
+            self._started = True
+            self._num_remove = int(attrs.get('length', 0))
+            self._num_insert = 0
+
+    def characters(self, content: str):
+        if self._started:
+            self._num_insert += len(content)
+
+    def endElement(self, name: str):
+        if self._started:
+            self._replacements.append((self._num_remove, self._num_insert))
+            self._started = False
+
+    def get_total_cost(self):
+        return sum(ninsert + nremove for ninsert, nremove in self._replacements)
+
+
+def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str], mapper: MapDispatcherFun[str, str]) -> int:
+    def run_clang_format(fn: str) -> str:
+        clang_args = ['clang-format', '--style=file', '--output-replacements-xml', fn]
+        return subprocess.run(clang_args, check=True, capture_output=True, text=True).stdout
 
     save_clang_format_config(config)
-    return sum(mapper(eval_file_cost, file_list))
+    handler = ReplacementsXmlHandler()
+    parser = xml.sax.make_parser(['xml.sax.IncrementalParser'])
+    parser.setContentHandler(handler)
+    for output in mapper(run_clang_format, file_list):
+        parser.reset()
+        parser.feed(output)
+        parser.close()
+    return handler.get_total_cost()
 
 
 def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[str], cost_fun: StyleObjectiveFun):
