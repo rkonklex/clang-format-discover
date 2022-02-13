@@ -2,7 +2,7 @@ import concurrent.futures, subprocess
 import os, os.path, sys, time, glob
 import yaml
 import xml.etree.ElementTree as ET
-from typing import Callable, Iterable, Dict, List
+from typing import Callable, Iterable, Dict, List, Tuple, TypeVar
 
 # Extracted from the documentation of clang-format version 13
 # https://releases.llvm.org/13.0.0/tools/clang/docs/ClangFormatStyleOptions.html
@@ -110,8 +110,10 @@ ALL_TUNEABLE_OPTIONS = {
 CLANG_FORMAT_CONFIG_FILE = '.clang-format'
 CXX_EXTENSIONS = ['.cpp', '.cxx', '.cc', '.c', '.hpp', '.hxx', '.hh', '.h', '.ipp']
 
+_T, _U = TypeVar('T'), TypeVar('U')
 StyleSettings = Dict[str, str]
 StyleObjectiveFun = Callable[[StyleSettings], int]
+MapDispatcherFun = Callable[[Callable[[_T], _U], Iterable[_T]], Iterable[_U]]
 
 
 def save_clang_format_config(config: StyleSettings):
@@ -119,7 +121,7 @@ def save_clang_format_config(config: StyleSettings):
         yaml.dump(config, f, Dumper=yaml.SafeDumper, explicit_start=True, explicit_end=True, sort_keys=False)
 
 
-def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str]) -> int:
+def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str], mapper: MapDispatcherFun[str, int]) -> int:
     def run_clang_format(fn: str):
         clang_args = ['clang-format', '--style=file', '--output-replacements-xml', fn]
         return subprocess.run(clang_args, check=True, capture_output=True).stdout
@@ -134,8 +136,7 @@ def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str]) -
         return process_response(ET.fromstring(run_clang_format(filename)))
 
     save_clang_format_config(config)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-        return sum(executor.map(eval_file_cost, file_list))
+    return sum(mapper(eval_file_cost, file_list))
 
 
 def optimize_configuration(rw_config: StyleSettings, tuneable_options: List[str], cost_fun: StyleObjectiveFun):
@@ -212,13 +213,14 @@ def main():
         print(f'{CLANG_FORMAT_CONFIG_FILE} not found: will create it for you')
 
     file_list = collect_source_files(sys.argv[1:] if len(sys.argv) > 1 else ['.'])
-    cost_func = lambda config: eval_clang_format_config_cost(config, file_list)
     print('Source files:', ' '.join(file_list), '\n')
 
     tuneable_options = list(ALL_TUNEABLE_OPTIONS.keys() - baseline_config.keys())
     current_config = baseline_config.copy()
     try:
-        optimize_configuration(current_config, tuneable_options, cost_func)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            cost_func: StyleObjectiveFun = lambda config: eval_clang_format_config_cost(config, file_list, executor.map)
+            optimize_configuration(current_config, tuneable_options, cost_func)
     except KeyboardInterrupt:
         print('\ninterrupted')
 
