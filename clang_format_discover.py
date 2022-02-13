@@ -213,6 +213,7 @@ def main():
 
     file_list = collect_source_files(sys.argv[1:])
     cost_func = lambda config: eval_clang_format_config_cost(config, file_list)
+    print('Source files:', ' '.join(file_list), '\n')
 
     tuneable_options = list(ALL_TUNEABLE_OPTIONS.keys() - baseline_config.keys())
     current_config = baseline_config.copy()
