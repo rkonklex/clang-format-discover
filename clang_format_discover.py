@@ -108,7 +108,7 @@ ALL_TUNEABLE_OPTIONS = {
 }
 
 CLANG_FORMAT_CONFIG_FILE = '.clang-format'
-CXX_EXTENSIONS = ['.cpp', '.cxx', '.cc', '.hpp', '.hxx', '.hh', '.h']
+CXX_EXTENSIONS = ['.cpp', '.cxx', '.cc', '.c', '.hpp', '.hxx', '.hh', '.h', '.ipp']
 
 StyleSettings = Dict[str, str]
 StyleObjectiveFun = Callable[[StyleSettings], int]
