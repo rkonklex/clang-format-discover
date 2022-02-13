@@ -211,7 +211,7 @@ def main():
         baseline_config = {'Language':'Cpp'}
         print(f'{CLANG_FORMAT_CONFIG_FILE} not found: will create it for you')
 
-    file_list = collect_source_files(sys.argv[1:])
+    file_list = collect_source_files(sys.argv[1:] if len(sys.argv) > 1 else ['.'])
     cost_func = lambda config: eval_clang_format_config_cost(config, file_list)
     print('Source files:', ' '.join(file_list), '\n')
 
