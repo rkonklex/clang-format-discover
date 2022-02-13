@@ -164,6 +164,11 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[
                 print('!', end='', flush=True)
         return costs
 
+    def costs_to_string(costs: ValueCostMap) -> str:
+        sorted_costs = sorted(costs.items(), key=lambda kv: kv[1])
+        formatted_costs = [f'{val}:{cost}' for val, cost in sorted_costs]
+        return '{' + ' '.join(formatted_costs) + '}'
+
     current_cost = cost_fun(rw_config)
     noop_sentinel = None
     print(f'Trying to optimize {len(effective_tuneable_options)} variables...')
@@ -178,7 +183,7 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[
             if noop_sentinel:
                 print()
                 noop_sentinel = None
-            print(f'{key}={best_val} cost {current_cost} => {best_cost} {all_costs}')
+            print(f'{key}={best_val} cost {current_cost} => {best_cost} {costs_to_string(all_costs)}')
             if best_val == EMPTY_VAL:
                 del rw_config[key]
             else:
