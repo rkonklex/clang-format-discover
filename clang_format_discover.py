@@ -187,6 +187,10 @@ def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str], d
     return handler.get_total_cost()
 
 
+def capture_process_output(args: List[str]) -> str:
+    return subprocess.run(args, check=True, capture_output=True, text=True).stdout
+
+
 def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[str], cost_fun: StyleObjectiveFun):
     effective_tuneable_options = [k for k in tuneable_options if not k in rw_config]
     if not effective_tuneable_options:
@@ -240,10 +244,10 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[
 
 def verify_clang_version():
     try:
-        clang_version = subprocess.run(['clang-format', '--version'], check=True, capture_output=True).stdout
+        clang_version = capture_process_output(['clang-format', '--version'])
     except FileNotFoundError:
         sys.exit('clang-format not found!')
-    if not clang_version.startswith(b'clang-format version 13.0.0'):
+    if not clang_version.startswith('clang-format version 13.0.0'):
         sys.exit('clang-format version 13.0.0 is required')
 
 
@@ -277,8 +281,7 @@ class ThreadPoolProcessDispatcher(object):
 
     def map(self, args_list: Iterable[List[str]]) -> Iterable[Iterable[str]]:
         def dispatch_one(args: List[str]) -> Iterable[str]:
-            process = subprocess.run(args, check=True, capture_output=True, text=True)
-            return process.stdout.splitlines()
+            return capture_process_output(args).splitlines()
         return self._executor.map(dispatch_one, args_list)
 
 
