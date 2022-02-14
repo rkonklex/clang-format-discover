@@ -187,8 +187,8 @@ def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str], d
     return handler.get_total_cost()
 
 
-def capture_process_output(args: List[str]) -> str:
-    return subprocess.run(args, check=True, capture_output=True, text=True).stdout
+def capture_process_output(args: List[str], timeout: int=10) -> str:
+    return subprocess.run(args, check=True, capture_output=True, text=True, timeout=timeout).stdout
 
 
 def get_safe_option_values(key: str, current_config: StyleSettings) -> List[str]:
