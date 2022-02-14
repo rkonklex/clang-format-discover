@@ -8,7 +8,7 @@ A simple tool for extracting clang-format style configuration from existing C++ 
 
 ## Installation
 ```sh
-python3 -m pip install clang-format-discover-0.0.1.tar.gz
+python3 -m pip install git+https://github.com/rkonklex/clang-format-discover.git
 ```
 
 ## Usage
