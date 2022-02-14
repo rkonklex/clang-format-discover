@@ -309,11 +309,8 @@ def main():
     t_end = time.monotonic()
     print(f'Processing time: {t_end-t_start} seconds\n')
 
-    if current_config != baseline_config:
-        print(f'Saving configuration to {CLANG_FORMAT_CONFIG_FILE}')
-        save_clang_format_config(current_config)
-    else:
-        print(f'{CLANG_FORMAT_CONFIG_FILE} not changed')
+    print(f'Saving best configuration to {CLANG_FORMAT_CONFIG_FILE}')
+    save_clang_format_config(current_config)
 
 if __name__ == '__main__':
     main()
