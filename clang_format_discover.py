@@ -215,7 +215,6 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[
     current_cost = cost_fun(rw_config)
     noop_sentinel = None
     print(f'Trying to optimize {len(effective_tuneable_options)} variables...')
-    t_start = time.monotonic()
     for key in itertools.cycle(effective_tuneable_options):
         if key == noop_sentinel:
             break
@@ -236,8 +235,7 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[
             if not noop_sentinel:
                 noop_sentinel = key
             print('.', end='', flush=True)
-    t_end = time.monotonic()
-    print(f'\nDone! Processing time: {t_end-t_start} seconds\n')
+    print('\nDone!\n')
 
 
 def verify_clang_version():
@@ -297,6 +295,7 @@ def main():
     print('Source files:', ' '.join(file_list), '\n')
 
     current_config = baseline_config.copy()
+    t_start = time.monotonic()
     try:
         with ThreadPoolProcessDispatcher(max_workers=5) as dispatcher:
             def cost_func(config: StyleSettings) -> int:
@@ -307,6 +306,8 @@ def main():
             optimize_configuration(current_config, ALL_TUNEABLE_OPTIONS.keys(), cost_func)
     except KeyboardInterrupt:
         print('\nInterrupted')
+    t_end = time.monotonic()
+    print(f'Processing time: {t_end-t_start} seconds\n')
 
     print(f'Saving best configuration to {CLANG_FORMAT_CONFIG_FILE}')
     save_clang_format_config(current_config)
