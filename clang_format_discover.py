@@ -1,9 +1,17 @@
-import concurrent.futures, subprocess
+import concurrent.futures
+import glob
 import itertools
-import os, os.path, sys, time, glob
+import os
+import os.path
+import subprocess
+import sys
+import time
+import xml.sax
+import xml.sax.handler
+from typing import Callable, Dict, Iterable, List, Tuple, TypeVar
+
 import yaml
-import xml.sax, xml.sax.handler
-from typing import Callable, Iterable, Dict, List, Tuple, TypeVar
+
 
 # Extracted from the documentation of clang-format version 13
 # https://releases.llvm.org/13.0.0/tools/clang/docs/ClangFormatStyleOptions.html
@@ -123,7 +131,7 @@ ValueCostMap = Dict[str, int]
 
 
 def save_clang_format_config(config: StyleSettings):
-    with open(CLANG_FORMAT_CONFIG_FILE, 'w') as f:
+    with open(CLANG_FORMAT_CONFIG_FILE, 'w', encoding='utf-8') as f:
         yaml.dump(config, f, Dumper=yaml.SafeDumper, explicit_start=True, explicit_end=True, sort_keys=False)
 
 
@@ -134,6 +142,7 @@ class ReplacementsXmlHandler(xml.sax.handler.ContentHandler):
     _replacements: List[Tuple[int, int]]
 
     def __init__(self) -> None:
+        super().__init__()
         self._replacements = []
 
     def startElement(self, name: str, attrs: Dict[str, str]):
@@ -278,7 +287,7 @@ class ThreadPoolProcessDispatcher(object):
 def main():
     verify_clang_version()
     try:
-        with open(CLANG_FORMAT_CONFIG_FILE, 'r') as f:
+        with open(CLANG_FORMAT_CONFIG_FILE, 'r', encoding='utf-8') as f:
             baseline_config: StyleSettings = yaml.load(f, Loader=yaml.BaseLoader)
     except FileNotFoundError:
         baseline_config: StyleSettings = {'Language':'Cpp'}
