@@ -191,6 +191,22 @@ def capture_process_output(args: List[str]) -> str:
     return subprocess.run(args, check=True, capture_output=True, text=True).stdout
 
 
+def get_safe_option_values(key: str, current_config: StyleSettings) -> List[str]:
+    safe_values = ALL_TUNEABLE_OPTIONS[key]
+    if key in ['BinPackParameters', 'InsertTrailingCommas']:
+        def get_effective_config() -> StyleSettings:
+            save_clang_format_config(current_config)
+            output_txt = capture_process_output(['clang-format', '--style=file', '--dump-config'])
+            return yaml.load(output_txt, Loader=yaml.BaseLoader)
+        effective_config = get_effective_config()
+        safe_values = safe_values.copy()
+        if key == 'InsertTrailingCommas' and effective_config['BinPackParameters'] == 'true':
+            safe_values.remove('Wrapped')
+        elif key == 'BinPackParameters' and effective_config['InsertTrailingCommas'] == 'Wrapped':
+            safe_values.remove('true')
+    return safe_values
+
+
 def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[str], cost_fun: StyleObjectiveFun):
     effective_tuneable_options = [k for k in tuneable_options if not k in rw_config]
     if not effective_tuneable_options:
@@ -203,7 +219,7 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[
             del config[key]
             # prefer defaulted values
             costs[EMPTY_VAL] = cost_fun(config) - 1
-        for val in ALL_TUNEABLE_OPTIONS[key]:
+        for val in get_safe_option_values(key, baseline):
             try:
                 config[key] = val
                 costs[val] = cost_fun(config)
