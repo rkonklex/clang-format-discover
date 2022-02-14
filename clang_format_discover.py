@@ -113,11 +113,12 @@ EMPTY_VAL = ''
 
 CLANG_FORMAT_CONFIG_FILE = '.clang-format'
 CXX_EXTENSIONS = ['.cpp', '.cxx', '.cc', '.c', '.hpp', '.hxx', '.hh', '.h', '.ipp']
+FILE_BATCH_SIZE = 10
 
 _T, _U = TypeVar('T'), TypeVar('U')
 StyleSettings = Dict[str, str]
 StyleObjectiveFun = Callable[[StyleSettings], int]
-MapDispatcherFun = Callable[[Callable[[_T], _U], Iterable[_T]], Iterable[_U]]
+ProcessDispatcherFun = Callable[[Iterable[_T]], Iterable[_U]]
 ValueCostMap = Dict[str, int]
 
 
@@ -154,12 +155,12 @@ class ReplacementsXmlHandler(xml.sax.handler.ContentHandler):
         return sum(ninsert + nremove for ninsert, nremove in self._replacements)
 
 
-def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str], mapper: MapDispatcherFun[Iterable[str], str]) -> int:
-    def run_clang_format(files: Iterable[str]) -> str:
-        clang_args = ['clang-format', '--style=file', '--output-replacements-xml', *files]
-        return subprocess.run(clang_args, check=True, capture_output=True, text=True).stdout
+def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str], dispatcher: ProcessDispatcherFun[List[str], Iterable[str]]) -> int:
+    def make_clang_format_args(files: Iterable[str]) -> List[str]:
+        return ['clang-format', '--style=file', '--output-replacements-xml', *files]
 
-    def chunkify(it: Iterable[str], size: int) -> Iterable[Tuple[str]]:
+    # based on https://stackoverflow.com/a/22045226
+    def chunkify(it: Iterable[_T], size: int) -> Iterable[Tuple[_T]]:
         it = iter(it)
         return iter(lambda: tuple(itertools.islice(it, size)), ())
 
@@ -167,8 +168,9 @@ def eval_clang_format_config_cost(config: StyleSettings, file_list: List[str], m
     handler = ReplacementsXmlHandler()
     parser = xml.sax.make_parser(['xml.sax.IncrementalParser'])
     parser.setContentHandler(handler)
-    for output_xml in mapper(run_clang_format, chunkify(file_list, 10)):
-        for line in output_xml.splitlines():
+    file_list_chunks = chunkify(file_list, FILE_BATCH_SIZE)
+    for output_xml in dispatcher(map(make_clang_format_args, file_list_chunks)):
+        for line in output_xml:
             if line.startswith("<?xml version='1.0'?>"):
                 parser.close()
                 parser.reset()
@@ -253,6 +255,26 @@ def collect_source_files(args: List[str]) -> List[str]:
     return list(path for path in file_list if is_cxx_file(path))
 
 
+class ThreadPoolProcessDispatcher(object):
+    _executor: concurrent.futures.Executor
+
+    def __init__(self, max_workers:int=5) -> None:
+        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+
+    def __enter__(self):
+        self._executor.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        return self._executor.__exit__(*exc)
+
+    def map(self, args_list: Iterable[List[str]]) -> Iterable[Iterable[str]]:
+        def dispatch_one(args: List[str]) -> Iterable[str]:
+            process = subprocess.run(args, check=True, capture_output=True, text=True)
+            return process.stdout.splitlines()
+        return self._executor.map(dispatch_one, args_list)
+
+
 def main():
     verify_clang_version()
     try:
@@ -267,8 +289,9 @@ def main():
 
     current_config = baseline_config.copy()
     try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-            cost_func: StyleObjectiveFun = lambda config: eval_clang_format_config_cost(config, file_list, executor.map)
+        with ThreadPoolProcessDispatcher(max_workers=5) as dispatcher:
+            def cost_func(config: StyleSettings) -> int:
+                return eval_clang_format_config_cost(config, file_list, dispatcher.map)
             # start with most impactful options
             optimize_configuration(current_config, PRIORITY_OPTIONS, cost_func)
             # then continue with the rest
