@@ -311,7 +311,7 @@ def main():
         print(f'{CLANG_FORMAT_CONFIG_FILE} not found: will create it for you')
 
     file_list = collect_source_files(sys.argv[1:] if len(sys.argv) > 1 else ['.'])
-    print('Source files:', ' '.join(file_list), '\n')
+    print(f'Source files ({len(file_list)}):', ' '.join(file_list), '\n')
 
     current_config = baseline_config.copy()
     t_start = time.monotonic()
