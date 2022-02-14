@@ -203,8 +203,8 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[
             try:
                 config[key] = val
                 costs[val] = cost_fun(config)
-            except subprocess.CalledProcessError:
-                print('!', end='', flush=True)
+            except subprocess.CalledProcessError as ex:
+                print('\nclang-format error:\n', ex.stderr, sep='', file=sys.stderr)
         return costs
 
     def costs_to_string(costs: ValueCostMap) -> str:
