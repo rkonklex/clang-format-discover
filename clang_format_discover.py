@@ -8,7 +8,7 @@ import sys
 import time
 import xml.sax
 import xml.sax.handler
-from typing import Callable, Dict, Iterable, List, Set, TextIO, Tuple, TypeVar, Union
+from typing import Callable, Dict, Iterable, List, Optional, Set, TextIO, Tuple, TypeVar, Union
 
 import yaml
 
@@ -220,9 +220,17 @@ def get_safe_option_values(key: str, current_config: StyleSettings) -> List[str]
     return safe_values
 
 
-def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[str], cost_fun: StyleObjectiveFun):
-    effective_tuneable_options = ordered_diff(tuneable_options, rw_config.keys())
-    if not effective_tuneable_options:
+def optimize_configuration(
+        rw_config: StyleSettings,
+        cost_fun: StyleObjectiveFun,
+        include_opts: Optional[Iterable[str]] = None,
+        exclude_opts: Optional[Iterable[str]] = None):
+    if include_opts is None:
+        include_opts = ALL_TUNEABLE_OPTIONS.keys()
+    if exclude_opts is None:
+        exclude_opts = rw_config.keys()
+    tuneable_options = ordered_diff(include_opts, exclude_opts)
+    if not tuneable_options:
         return
 
     def calc_values_costs(baseline: StyleSettings, key: str) -> ValueCostMap:
@@ -245,8 +253,8 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[
 
     current_cost = cost_fun(rw_config)
     visited_keys: Set[str] = set()
-    print(f'Trying to optimize {len(effective_tuneable_options)} variables...')
-    for key in itertools.cycle(effective_tuneable_options):
+    print(f'Trying to optimize {len(tuneable_options)} variables...')
+    for key in itertools.cycle(tuneable_options):
         if key in visited_keys:
             break
         all_costs = calc_values_costs(rw_config, key)
@@ -268,7 +276,10 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[
     print('\nDone!\n')
 
 
-def minimize_configuration(rw_config: StyleSettings, frozen_options: Iterable[str], cost_fun: StyleObjectiveFun):
+def minimize_configuration(
+        rw_config: StyleSettings,
+        cost_fun: StyleObjectiveFun,
+        frozen_options: Iterable[str]):
     tuneable_keys = ordered_diff(rw_config.keys(), frozen_options)
     if not tuneable_keys:
         return
@@ -366,17 +377,18 @@ def main():
     print(f'Source files ({len(file_list)}):', ' '.join(file_list), '\n')
 
     current_config = baseline_config.copy()
+    exclude_options: List[str] = list(baseline_config.keys())
     t_start = time.monotonic()
     try:
         with ThreadPoolProcessDispatcher(max_workers=5) as dispatcher:
             def cost_func(config: StyleSettings) -> int:
                 return eval_clang_format_config_cost(config, file_list, dispatcher.map)
             # start with most impactful options
-            optimize_configuration(current_config, PRIORITY_OPTIONS, cost_func)
+            optimize_configuration(current_config, cost_func, include_opts=PRIORITY_OPTIONS, exclude_opts=exclude_options)
             # then continue with the rest
-            optimize_configuration(current_config, ALL_TUNEABLE_OPTIONS.keys(), cost_func)
+            optimize_configuration(current_config, cost_func, exclude_opts=exclude_options)
             # finally remove any redundant settings
-            minimize_configuration(current_config, baseline_config.keys(), cost_func)
+            minimize_configuration(current_config, cost_func, baseline_config.keys())
     except KeyboardInterrupt:
         print('\nInterrupted')
     t_end = time.monotonic()
