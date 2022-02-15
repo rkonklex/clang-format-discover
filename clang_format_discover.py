@@ -8,7 +8,7 @@ import sys
 import time
 import xml.sax
 import xml.sax.handler
-from typing import Callable, Dict, Iterable, List, Tuple, TypeVar
+from typing import Callable, Dict, Iterable, List, TextIO, Tuple, TypeVar, Union
 
 import yaml
 
@@ -130,9 +130,21 @@ ProcessDispatcherFun = Callable[[Iterable[_T]], Iterable[_U]]
 ValueCostMap = Dict[str, int]
 
 
+class ClangFormatLoader(yaml.SafeLoader):
+    # reset implicit type handlers - treat all scalars as strings
+    yaml_implicit_resolvers = {}
+
+def load_clang_format_config(file: Union[TextIO, str]) -> StyleSettings:
+    return yaml.load(file, Loader=ClangFormatLoader)
+
+
+class ClangFormatDumper(yaml.SafeDumper):
+    # reset implicit type handlers - treat all scalars as strings
+    yaml_implicit_resolvers = {}
+
 def save_clang_format_config(config: StyleSettings):
     with open(CLANG_FORMAT_CONFIG_FILE, 'w', encoding='utf-8') as f:
-        yaml.dump(config, f, Dumper=yaml.SafeDumper, explicit_start=True, explicit_end=True, sort_keys=False)
+        yaml.dump(config, f, Dumper=ClangFormatDumper, explicit_start=True, explicit_end=True, sort_keys=False)
 
 
 class ReplacementsXmlHandler(xml.sax.handler.ContentHandler):
@@ -197,7 +209,7 @@ def get_safe_option_values(key: str, current_config: StyleSettings) -> List[str]
         def get_effective_config() -> StyleSettings:
             save_clang_format_config(current_config)
             output_txt = capture_process_output(['clang-format', '--style=file', '--dump-config'])
-            return yaml.load(output_txt, Loader=yaml.BaseLoader)
+            return load_clang_format_config(output_txt)
         effective_config = get_effective_config()
         safe_values = safe_values.copy()
         if key == 'InsertTrailingCommas' and effective_config['BinPackParameters'] == 'true':
@@ -305,7 +317,7 @@ def main():
     verify_clang_version()
     try:
         with open(CLANG_FORMAT_CONFIG_FILE, 'r', encoding='utf-8') as f:
-            baseline_config: StyleSettings = yaml.load(f, Loader=yaml.BaseLoader)
+            baseline_config: StyleSettings = load_clang_format_config(f)
     except FileNotFoundError:
         baseline_config: StyleSettings = {'Language':'Cpp'}
         print(f'{CLANG_FORMAT_CONFIG_FILE} not found: will create it for you')
