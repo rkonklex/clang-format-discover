@@ -323,7 +323,7 @@ def minimize_configuration(
             print('\nclang-format error:\n', ex.stderr, sep='', file=sys.stderr)
             continue
 
-        if new_cost < current_cost:
+        if new_cost <= current_cost:
             if len(visited_keys) > 1:
                 print()
             print(f'Removed {key} cost {current_cost} => {new_cost}')
