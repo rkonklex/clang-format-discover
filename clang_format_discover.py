@@ -8,7 +8,7 @@ import sys
 import time
 import xml.sax
 import xml.sax.handler
-from typing import Callable, Dict, Iterable, List, TextIO, Tuple, TypeVar, Union
+from typing import Callable, Dict, Iterable, List, Set, TextIO, Tuple, TypeVar, Union
 
 import yaml
 
@@ -119,7 +119,6 @@ ALL_TUNEABLE_OPTIONS = {
     'UseTab': ['Never', 'ForIndentation', 'ForContinuationAndIndentation', 'AlignWithSpaces', 'Always'],
 }
 PRIORITY_OPTIONS = ['BasedOnStyle', 'BreakBeforeBraces', 'IndentWidth', 'UseTab', 'SortIncludes', 'IncludeBlocks']
-EMPTY_VAL = '<default>'
 
 CLANG_FORMAT_CONFIG_FILE = '.clang-format'
 CXX_EXTENSIONS = ['.cpp', '.cxx', '.cc', '.c', '.hpp', '.hxx', '.hh', '.h', '.ipp']
@@ -222,17 +221,13 @@ def get_safe_option_values(key: str, current_config: StyleSettings) -> List[str]
 
 
 def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[str], cost_fun: StyleObjectiveFun):
-    effective_tuneable_options = [k for k in tuneable_options if not k in rw_config]
+    effective_tuneable_options = ordered_diff(tuneable_options, rw_config.keys())
     if not effective_tuneable_options:
         return
 
     def calc_values_costs(baseline: StyleSettings, key: str) -> ValueCostMap:
         config = baseline.copy()
         costs: ValueCostMap = {}
-        if key in config and key in effective_tuneable_options:
-            del config[key]
-            # prefer defaulted values
-            costs[EMPTY_VAL] = cost_fun(config) - 1
         for val in get_safe_option_values(key, baseline):
             try:
                 config[key] = val
@@ -247,29 +242,67 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[
         return '{' + ' '.join(formatted_costs) + '}'
 
     current_cost = cost_fun(rw_config)
-    noop_sentinel = None
+    visited_keys: Set[str] = set()
     print(f'Trying to optimize {len(effective_tuneable_options)} variables...')
     for key in itertools.cycle(effective_tuneable_options):
-        if key == noop_sentinel:
+        if key in visited_keys:
             break
         all_costs = calc_values_costs(rw_config, key)
         best_val, best_cost = min(all_costs.items(), key=lambda kv: kv[1])
 
         if best_cost < current_cost:
-            if noop_sentinel:
+            if len(visited_keys) > 1:
                 print()
-                noop_sentinel = None
-            print(f'{key}={best_val} cost {current_cost} => {best_cost} {costs_to_string(all_costs)}')
-            if best_val == EMPTY_VAL:
-                del rw_config[key]
-            else:
-                rw_config[key] = best_val
+            print(f'Set {key}={best_val} cost {current_cost} => {best_cost} {costs_to_string(all_costs)}')
+            rw_config[key] = best_val
             current_cost = best_cost
+            visited_keys.clear()
         else:
-            if not noop_sentinel:
-                noop_sentinel = key
             print('.', end='', flush=True)
+        visited_keys.add(key)
     print('\nDone!\n')
+
+
+def minimize_configuration(rw_config: StyleSettings, frozen_options: Iterable[str], cost_fun: StyleObjectiveFun):
+    tuneable_keys = ordered_diff(rw_config.keys(), frozen_options)
+    if not tuneable_keys:
+        return
+
+    def calc_defaulted_value_cost(baseline: StyleSettings, key: str) -> int:
+        config = baseline.copy()
+        del config[key]
+        return cost_fun(config)
+
+    current_cost = cost_fun(rw_config)
+    visited_keys: Set[str] = set()
+    print('Trying to minimize the configuration...')
+    for key in itertools.cycle(tuneable_keys):
+        if key in visited_keys:
+            break
+
+        try:
+            new_cost = calc_defaulted_value_cost(rw_config, key)
+        except KeyError:
+            continue
+        except subprocess.CalledProcessError as ex:
+            print('\nclang-format error:\n', ex.stderr, sep='', file=sys.stderr)
+            continue
+
+        if new_cost < current_cost:
+            if len(visited_keys) > 1:
+                print()
+            print(f'Removed {key} cost {current_cost} => {new_cost}')
+            del rw_config[key]
+            current_cost = new_cost
+            visited_keys.clear()
+        else:
+            print('.', end='', flush=True)
+        visited_keys.add(key)
+    print('\nDone!\n')
+
+
+def ordered_diff(first: Iterable[_T], second: Iterable[_T]) -> List[_T]:
+    return [k for k in first if k not in second]
 
 
 def verify_clang_version():
@@ -337,6 +370,8 @@ def main():
             optimize_configuration(current_config, PRIORITY_OPTIONS, cost_func)
             # then continue with the rest
             optimize_configuration(current_config, ALL_TUNEABLE_OPTIONS.keys(), cost_func)
+            # finally remove any redundant settings
+            minimize_configuration(current_config, baseline_config.keys(), cost_func)
     except KeyboardInterrupt:
         print('\nInterrupted')
     t_end = time.monotonic()
