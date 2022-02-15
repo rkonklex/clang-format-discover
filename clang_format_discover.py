@@ -229,6 +229,8 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[
         config = baseline.copy()
         costs: ValueCostMap = {}
         for val in get_safe_option_values(key, baseline):
+            if baseline.get(key) == val:
+                continue # skip baseline cost calculation
             try:
                 config[key] = val
                 costs[val] = cost_fun(config)
@@ -253,7 +255,10 @@ def optimize_configuration(rw_config: StyleSettings, tuneable_options: Iterable[
         if best_cost < current_cost:
             if len(visited_keys) > 1:
                 print()
-            print(f'Set {key}={best_val} cost {current_cost} => {best_cost} {costs_to_string(all_costs)}')
+            if key in rw_config:
+                # include the baseline cost
+                all_costs[rw_config[key]] = current_cost
+            print(f'Set {key}={best_val} cost {current_cost}=>{best_cost} {costs_to_string(all_costs)}')
             rw_config[key] = best_val
             current_cost = best_cost
             visited_keys.clear()
