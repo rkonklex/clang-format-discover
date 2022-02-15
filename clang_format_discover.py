@@ -47,9 +47,25 @@ ALL_TUNEABLE_OPTIONS = {
     'BinPackArguments': BOOLEAN_OPTION_TYPE,
     'BinPackParameters': BOOLEAN_OPTION_TYPE,
     'BitFieldColonSpacing': ['Both', 'None', 'Before', 'After'],
+    'BraceWrapping:AfterCaseLabel': BOOLEAN_OPTION_TYPE,
+    'BraceWrapping:AfterClass': BOOLEAN_OPTION_TYPE,
+    'BraceWrapping:AfterControlStatement': ['Never', 'MultiLine', 'Always'],
+    'BraceWrapping:AfterEnum': BOOLEAN_OPTION_TYPE,
+    'BraceWrapping:AfterFunction': BOOLEAN_OPTION_TYPE,
+    'BraceWrapping:AfterNamespace': BOOLEAN_OPTION_TYPE,
+    'BraceWrapping:AfterStruct': BOOLEAN_OPTION_TYPE,
+    'BraceWrapping:AfterUnion': BOOLEAN_OPTION_TYPE,
+    'BraceWrapping:AfterExternBlock': BOOLEAN_OPTION_TYPE,
+    'BraceWrapping:BeforeCatch': BOOLEAN_OPTION_TYPE,
+    'BraceWrapping:BeforeElse': BOOLEAN_OPTION_TYPE,
+    'BraceWrapping:BeforeLambdaBody': BOOLEAN_OPTION_TYPE,
+    'BraceWrapping:BeforeWhile': BOOLEAN_OPTION_TYPE,
+    'BraceWrapping:IndentBraces': BOOLEAN_OPTION_TYPE,
+    'BraceWrapping:SplitEmptyFunction': BOOLEAN_OPTION_TYPE,
+    'BraceWrapping:SplitEmptyRecord': BOOLEAN_OPTION_TYPE,
+    'BraceWrapping:SplitEmptyNamespace': BOOLEAN_OPTION_TYPE,
     'BreakBeforeBinaryOperators': ['None', 'NonAssignment', 'All'],
     'BreakBeforeConceptDeclarations': BOOLEAN_OPTION_TYPE,
-    'BreakBeforeBraces': ['Attach', 'Linux', 'Mozilla', 'Stroustrup', 'Allman', 'Whitesmiths', 'GNU', 'WebKit'],
     'BreakBeforeInheritanceComma': BOOLEAN_OPTION_TYPE,
     'BreakBeforeTernaryOperators': BOOLEAN_OPTION_TYPE,
     'BreakConstructorInitializersBeforeComma': BOOLEAN_OPTION_TYPE,
@@ -119,7 +135,7 @@ ALL_TUNEABLE_OPTIONS = {
     'Standard': ['c++03', 'c++11', 'c++14', 'c++17', 'c++20', 'Latest'],
     'UseTab': ['Never', 'ForIndentation', 'ForContinuationAndIndentation', 'AlignWithSpaces', 'Always'],
 }
-PRIORITY_OPTIONS = ['BasedOnStyle', 'BreakBeforeBraces', 'IndentWidth', 'UseTab', 'SortIncludes', 'IncludeBlocks']
+PRIORITY_OPTIONS = ['BasedOnStyle', 'IndentWidth', 'UseTab', 'SortIncludes', 'IncludeBlocks']
 
 CLANG_FORMAT_CONFIG_FILE = '.clang-format'
 CXX_EXTENSIONS = ['.cpp', '.cxx', '.cc', '.c', '.hpp', '.hxx', '.hh', '.h', '.ipp']
@@ -379,6 +395,9 @@ def main():
 
     current_config = baseline_config.copy()
     exclude_options: List[str] = list(baseline_config.keys())
+    if current_config.setdefault('BreakBeforeBraces', 'Custom') != 'Custom':
+        # do not optimize brace wrapping when a preset has been set
+        exclude_options.extend(filter(lambda k: k.startswith('BraceWrapping:'), ALL_TUNEABLE_OPTIONS))
     t_start = time.monotonic()
     try:
         with ThreadPoolProcessDispatcher(max_workers=5) as dispatcher:
