@@ -129,6 +129,8 @@ ALL_TUNEABLE_OPTIONS = {
     'SpacesInCStyleCastParentheses': BOOLEAN_OPTION_TYPE,
     'SpacesInConditionalStatement': BOOLEAN_OPTION_TYPE,
     'SpacesInContainerLiterals': BOOLEAN_OPTION_TYPE,
+    'SpacesInLineCommentPrefix:Minimum': ['0', '1'],
+    'SpacesInLineCommentPrefix:Maximum': ['-1', '0', '1'],
     'SpacesInParentheses': BOOLEAN_OPTION_TYPE,
     'SpacesInSquareBrackets': BOOLEAN_OPTION_TYPE,
     'SpaceBeforeSquareBrackets': BOOLEAN_OPTION_TYPE,
