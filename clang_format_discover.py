@@ -10,6 +10,7 @@ import xml.sax
 import xml.sax.handler
 from typing import Callable, Dict, Iterable, List, Optional, Set, TextIO, Tuple, TypeVar, Union
 
+import flatdict
 import yaml
 
 
@@ -125,7 +126,7 @@ CXX_EXTENSIONS = ['.cpp', '.cxx', '.cc', '.c', '.hpp', '.hxx', '.hh', '.h', '.ip
 FILE_BATCH_SIZE = 10
 
 _T, _U = TypeVar('T'), TypeVar('U')
-StyleSettings = Dict[str, str]
+StyleSettings = flatdict.FlatDict
 StyleObjectiveFun = Callable[[StyleSettings], int]
 ProcessDispatcherFun = Callable[[Iterable[_T]], Iterable[_U]]
 ValueCostMap = Dict[str, int]
@@ -136,7 +137,7 @@ class ClangFormatLoader(yaml.SafeLoader):
     yaml_implicit_resolvers = {}
 
 def load_clang_format_config(file: Union[TextIO, str]) -> StyleSettings:
-    return yaml.load(file, Loader=ClangFormatLoader)
+    return StyleSettings(yaml.load(file, Loader=ClangFormatLoader))
 
 
 class ClangFormatDumper(yaml.SafeDumper):
@@ -145,7 +146,7 @@ class ClangFormatDumper(yaml.SafeDumper):
 
 def save_clang_format_config(config: StyleSettings):
     with open(CLANG_FORMAT_CONFIG_FILE, 'w', encoding='utf-8') as f:
-        yaml.dump(config, f, Dumper=ClangFormatDumper, explicit_start=True, explicit_end=True, sort_keys=False)
+        yaml.dump(config.as_dict(), f, Dumper=ClangFormatDumper, explicit_start=True, explicit_end=True, sort_keys=False)
 
 
 class ReplacementsXmlHandler(xml.sax.handler.ContentHandler):
@@ -368,9 +369,9 @@ def main():
     verify_clang_version()
     try:
         with open(CLANG_FORMAT_CONFIG_FILE, 'r', encoding='utf-8') as f:
-            baseline_config: StyleSettings = load_clang_format_config(f)
+            baseline_config = load_clang_format_config(f)
     except FileNotFoundError:
-        baseline_config: StyleSettings = {'Language':'Cpp'}
+        baseline_config = StyleSettings({'Language':'Cpp'})
         print(f'{CLANG_FORMAT_CONFIG_FILE} not found: will create it for you')
 
     file_list = collect_source_files(sys.argv[1:] if len(sys.argv) > 1 else ['.'])
