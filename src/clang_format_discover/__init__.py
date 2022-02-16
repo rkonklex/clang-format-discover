@@ -14,6 +14,7 @@ from .utils import search_files
 
 CXX_EXTENSIONS = ['.cpp', '.cxx', '.cc', '.c', '.hpp', '.hxx', '.hh', '.h', '.ipp']
 FILE_BATCH_SIZE = 10
+FILE_LIST_PRINT_MAX = 10
 
 
 def verify_clang_version():
@@ -34,16 +35,20 @@ def main():
         baseline_config = StyleSettings({'Language':'Cpp'})
         print(f'{CLANG_FORMAT_CONFIG_FILE} not found: will create it for you')
 
-    search_roots = sys.argv[1:] if len(sys.argv) > 1 else ['.']
-    file_list = search_files(search_roots, CXX_EXTENSIONS)
-    print(f'Source files ({len(file_list)}):', ' '.join(file_list), '\n')
-
     current_config = baseline_config.copy()
     exclude_options: List[str] = list(baseline_config.keys())
     if current_config.setdefault('BreakBeforeBraces', 'Custom') != 'Custom':
         # do not optimize brace wrapping when a preset has been set
         brace_wrapping_opts = filter(lambda k: k.startswith('BraceWrapping:'), ALL_TUNEABLE_OPTIONS)
         exclude_options.extend(brace_wrapping_opts)
+
+    search_roots = sys.argv[1:] if len(sys.argv) > 1 else ['.']
+    file_list = search_files(search_roots, CXX_EXTENSIONS)
+    print(f'Source files ({len(file_list)}): ', end='')
+    if len(file_list) <= FILE_LIST_PRINT_MAX:
+        print(' '.join(file_list), '\n')
+    else:
+        print(' '.join(file_list[:FILE_LIST_PRINT_MAX]), '(...)', '\n')
 
     t_start = time.monotonic()
     try:
