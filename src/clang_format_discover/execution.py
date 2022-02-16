@@ -3,8 +3,22 @@ import subprocess
 from typing import Iterable, List
 
 
+class ProcessRunError(Exception):
+    def __init__(self, returncode: int, stderr: str) -> None:
+        self.returncode = returncode
+        self.stderr = stderr
+
+
 def capture_process_output(args: List[str], timeout: int=10) -> str:
-    return subprocess.run(args, check=True, capture_output=True, text=True, timeout=timeout).stdout
+    try:
+        return subprocess.run(
+            args,
+            check=True,
+            capture_output=True, text=True,
+            timeout=timeout
+        ).stdout
+    except subprocess.CalledProcessError as ex:
+        raise ProcessRunError(ex.returncode, ex.stderr) from ex
 
 
 class ThreadPoolProcessDispatcher(object):

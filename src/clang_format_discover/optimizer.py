@@ -1,11 +1,11 @@
 import itertools
-import subprocess
 import sys
 from typing import Callable, Dict, Iterable, List, Optional, Set
 
-from .options import ALL_TUNEABLE_OPTIONS
 from .config import StyleSettings
 from .config import get_effective_clang_format_config
+from .execution import ProcessRunError
+from .options import ALL_TUNEABLE_OPTIONS
 from .utils import ordered_diff
 
 StyleObjectiveFun = Callable[[StyleSettings], int]
@@ -47,7 +47,7 @@ def optimize_configuration(
             try:
                 config[key] = val
                 costs[val] = cost_fun(config)
-            except subprocess.CalledProcessError as ex:
+            except ProcessRunError as ex:
                 print('\nclang-format error:\n', ex.stderr, sep='', file=sys.stderr)
         return costs
 
@@ -106,7 +106,7 @@ def minimize_configuration(
             new_cost = calc_defaulted_value_cost(rw_config, key)
         except KeyError:
             continue
-        except subprocess.CalledProcessError as ex:
+        except ProcessRunError as ex:
             print('\nclang-format error:\n', ex.stderr, sep='', file=sys.stderr)
             continue
 
