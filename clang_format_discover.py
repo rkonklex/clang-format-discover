@@ -43,7 +43,6 @@ ALL_TUNEABLE_OPTIONS = {
     'AlwaysBreakAfterReturnType': ['None', 'All', 'TopLevel', 'AllDefinitions', 'TopLevelDefinitions'],
     'AlwaysBreakBeforeMultilineStrings': BOOLEAN_OPTION_TYPE,
     'AlwaysBreakTemplateDeclarations': ['No', 'MultiLine', 'Yes'],
-    'BasedOnStyle': ['LLVM', 'Google', 'Chromium', 'Mozilla', 'WebKit', 'Microsoft', 'GNU'],
     'BinPackArguments': BOOLEAN_OPTION_TYPE,
     'BinPackParameters': BOOLEAN_OPTION_TYPE,
     'BitFieldColonSpacing': ['Both', 'None', 'Before', 'After'],
@@ -136,7 +135,7 @@ ALL_TUNEABLE_OPTIONS = {
     'Standard': ['c++03', 'c++11', 'c++14', 'c++17', 'c++20', 'Latest'],
     'UseTab': ['Never', 'ForIndentation', 'ForContinuationAndIndentation', 'AlignWithSpaces', 'Always'],
 }
-PRIORITY_OPTIONS = ['BasedOnStyle', 'IndentWidth', 'UseTab', 'SortIncludes', 'IncludeBlocks']
+PRIORITY_OPTIONS = ['IndentWidth', 'UseTab', 'SortIncludes', 'IncludeBlocks']
 
 CLANG_FORMAT_CONFIG_FILE = '.clang-format'
 CXX_EXTENSIONS = ['.cpp', '.cxx', '.cc', '.c', '.hpp', '.hxx', '.hh', '.h', '.ipp']
