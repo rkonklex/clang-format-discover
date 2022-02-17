@@ -24,6 +24,31 @@ def get_safe_option_values(key: str, current_config: StyleSettings) -> List[str]
     return safe_values
 
 
+def evaluate_option_values(
+        baseline: StyleSettings,
+        key: str,
+        cost_fun: StyleObjectiveFun,
+        include_current: bool = True
+    ) -> ValueCostMap:
+    costs: ValueCostMap = {}
+    for val in get_safe_option_values(key, baseline):
+        if not include_current and baseline.get(key) == val:
+            continue # skip baseline cost calculation
+        try:
+            config = baseline.copy()
+            config[key] = val
+            costs[val] = cost_fun(config)
+        except ProcessRunError as ex:
+            print('\nclang-format error:\n', ex.stderr, sep='', file=sys.stderr)
+    return costs
+
+
+def costs_to_string(costs: ValueCostMap) -> str:
+    sorted_costs = sorted(costs.items(), key=lambda kv: kv[1])
+    formatted_costs = [f'{val}:{cost}' for val, cost in sorted_costs]
+    return '{' + ' '.join(formatted_costs) + '}'
+
+
 def optimize_configuration(
         rw_config: StyleSettings,
         cost_fun: StyleObjectiveFun,
@@ -38,39 +63,20 @@ def optimize_configuration(
     if not tuneable_options:
         return
 
-    def calc_values_costs(baseline: StyleSettings, key: str) -> ValueCostMap:
-        config = baseline.copy()
-        costs: ValueCostMap = {}
-        for val in get_safe_option_values(key, baseline):
-            if baseline.get(key) == val:
-                continue # skip baseline cost calculation
-            try:
-                config[key] = val
-                costs[val] = cost_fun(config)
-            except ProcessRunError as ex:
-                print('\nclang-format error:\n', ex.stderr, sep='', file=sys.stderr)
-        return costs
-
-    def costs_to_string(costs: ValueCostMap) -> str:
-        sorted_costs = sorted(costs.items(), key=lambda kv: kv[1])
-        formatted_costs = [f'{val}:{cost}' for val, cost in sorted_costs]
-        return '{' + ' '.join(formatted_costs) + '}'
-
     current_cost = cost_fun(rw_config)
     visited_keys: Set[str] = set()
     print(f'Trying to optimize {len(tuneable_options)} variables...')
     for key in itertools.cycle(tuneable_options):
         if key in visited_keys:
             break
-        all_costs = calc_values_costs(rw_config, key)
+        all_costs = evaluate_option_values(rw_config, key, cost_fun, include_current=False)
+        if key in rw_config:
+            all_costs[rw_config[key]] = current_cost
         best_val, best_cost = min(all_costs.items(), key=lambda kv: kv[1])
 
         if best_cost < current_cost:
             if len(visited_keys) > 1:
                 print()
-            if key in rw_config:
-                # include the baseline cost
-                all_costs[rw_config[key]] = current_cost
             print(f'Set {key}={best_val} cost {current_cost}=>{best_cost} {costs_to_string(all_costs)}')
             rw_config[key] = best_val
             current_cost = best_cost
@@ -90,7 +96,7 @@ def minimize_configuration(
     if not tuneable_keys:
         return
 
-    def calc_defaulted_value_cost(baseline: StyleSettings, key: str) -> int:
+    def evaluate_default_value(baseline: StyleSettings, key: str) -> int:
         config = baseline.copy()
         del config[key]
         return cost_fun(config)
@@ -103,7 +109,7 @@ def minimize_configuration(
             break
 
         try:
-            new_cost = calc_defaulted_value_cost(rw_config, key)
+            new_cost = evaluate_default_value(rw_config, key)
         except KeyError:
             continue
         except ProcessRunError as ex:
