@@ -1,7 +1,8 @@
 import xml.sax
 import xml.sax.handler
-from typing import Callable, Dict, Iterable, List, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
+from .config import StyleSettings, inline_clang_format_config
 from .utils import chunkify
 
 
@@ -13,10 +14,15 @@ ProcessDispatcher = Callable[[Iterable[ProcessArgsList]], Iterable[LineIterable]
 def eval_clang_format_cost(
         file_list: List[str],
         dispatcher: ProcessDispatcher,
+        config: Optional[StyleSettings] = None,
         batch_max: int = 10
         ) -> int:
+    if config is None:
+        style_arg = '--style=file'
+    else:
+        style_arg = '--style=' + inline_clang_format_config(config)
     def make_clang_format_args(files: Iterable[str]) -> List[str]:
-        return ['clang-format', '--style=file', '--output-replacements-xml', *files]
+        return ['clang-format', '--output-replacements-xml', style_arg, *files]
 
     handler = ReplacementsXmlHandler()
     parser = xml.sax.make_parser(['xml.sax.IncrementalParser'])

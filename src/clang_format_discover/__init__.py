@@ -54,8 +54,12 @@ def main():
     try:
         with ThreadPoolProcessDispatcher(max_workers=5) as dispatcher:
             def cost_func(config: StyleSettings) -> int:
-                save_clang_format_config(config)
-                return eval_clang_format_cost(file_list, dispatcher.map, batch_max=FILE_BATCH_SIZE)
+                return eval_clang_format_cost(
+                    file_list,
+                    dispatcher.map,
+                    config=config,
+                    batch_max=FILE_BATCH_SIZE
+                )
             # start with most impactful options
             optimize_configuration(current_config, cost_func, include_opts=PRIORITY_OPTIONS, exclude_opts=exclude_options)
             # then continue with the rest

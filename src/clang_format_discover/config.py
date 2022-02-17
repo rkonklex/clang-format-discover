@@ -1,3 +1,4 @@
+import json
 from typing import TextIO, Union
 
 import flatdict
@@ -34,7 +35,11 @@ def save_clang_format_config(config: StyleSettings):
         )
 
 
+def inline_clang_format_config(config: StyleSettings) -> str:
+    return json.dumps(config.as_dict())
+
+
 def get_effective_clang_format_config(config: StyleSettings) -> StyleSettings:
-    save_clang_format_config(config)
-    output_txt = capture_process_output(['clang-format', '--style=file', '--dump-config'])
+    style_arg = '--style=' + inline_clang_format_config(config)
+    output_txt = capture_process_output(['clang-format', '--dump-config', style_arg])
     return load_clang_format_config(output_txt)
